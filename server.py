@@ -1,82 +1,35 @@
-# import threading
-# import socket
+import asyncio
+import websockets
 
-# host = '127.0.0.1' 
-# port = 5000
+clients = set()
 
-# server = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-# server.bind((host,port))
-# server.listen()
+# Broadcast message to all connected clients
+async def broadcast(message):
+    for client in clients:
+        await client.send(message)
 
-# clients =[]
-# nicknames =[]
-
-# def broadcast(message):
-#     for client in clients:
-#         client.send(message)
-
-# def handle(client):
-#     while True:
-#         try:
-#             message = client.recv(1024)
-#             broadcast(message)
-#         except:
-#             index = client.index(client)
-#             clients.remove(client)
-#             client.close()
-#             nickname = nickname[index]
-#             broadcast('{} left!'.format(nickname).encode('ascii'))
-#             nicknames.remove(nickname)
-#             break
-
-# def receive():
-#     while True:
-#         client, address = server.accept()
-#         print("Connected with {}".format(str(address)))
-
-#         client.send('ABHI'.encode('ascii'))
-#         nickname = client.recv(1024).decode('ascii')
-#         nicknames.append(nickname)
-#         clients.append(client)
-
-        
-#         print("Nickname is {}".format(nickname))
-#         broadcast("{} joined!".format(nickname).encode('ascii'))
-#         client.send('Connected to server!'.encode('ascii'))
-
-#         thread = threading.Thread(target=handle, args=(client,))
-#         thread.start()
-# print('server is listening....')
-# receive()
-import socket
-
-host = '0.0.0.0'
-port = 5000
-
-server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-server.bind((host, port))
-
-clients = []
-
-print("Server is listening...")
-
-while True:
+# Handle individual client connections
+async def handle_client(websocket, path):
+    clients.add(websocket)
     try:
-        # Receive message and client address
-        message, client_address = server.recvfrom(1024)
+        # Send a welcome message to the new client
+        await websocket.send("Welcome to the WebSocket server!")
+        
+        # Listen for incoming messages from the client
+        async for message in websocket:
+            # Broadcast received message to all clients
+            await broadcast(message)
+    except:
+        pass
+    finally:
+        # Remove client when disconnected
+        clients.remove(websocket)
 
-        # Add new clients to the list
-        if client_address not in clients:
-            clients.append(client_address)
-            print(f"New client added: {client_address}")
+# Start the WebSocket server on port 5000
+async def main():
+    server = await websockets.serve(handle_client, '0.0.0.0', 5000)
+    print("Server is listening on ws://0.0.0.0:5000")
+    await server.wait_closed()
 
-        # Broadcast the message to all clients except the sender
-        print(f"Received message from {client_address}: {message.decode('ascii')}")
-        for client in clients:
-            if client != client_address:
-                server.sendto(message, client)
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        break
-
-server.close()
+if __name__ == "__main__":
+    asyncio.run(main())
