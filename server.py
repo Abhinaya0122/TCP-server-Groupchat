@@ -1,69 +1,82 @@
+# import threading
+# import socket
+
+# host = '127.0.0.1' 
+# port = 5000
+
+# server = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+# server.bind((host,port))
+# server.listen()
+
+# clients =[]
+# nicknames =[]
+
+# def broadcast(message):
+#     for client in clients:
+#         client.send(message)
+
+# def handle(client):
+#     while True:
+#         try:
+#             message = client.recv(1024)
+#             broadcast(message)
+#         except:
+#             index = client.index(client)
+#             clients.remove(client)
+#             client.close()
+#             nickname = nickname[index]
+#             broadcast('{} left!'.format(nickname).encode('ascii'))
+#             nicknames.remove(nickname)
+#             break
+
+# def receive():
+#     while True:
+#         client, address = server.accept()
+#         print("Connected with {}".format(str(address)))
+
+#         client.send('ABHI'.encode('ascii'))
+#         nickname = client.recv(1024).decode('ascii')
+#         nicknames.append(nickname)
+#         clients.append(client)
+
+        
+#         print("Nickname is {}".format(nickname))
+#         broadcast("{} joined!".format(nickname).encode('ascii'))
+#         client.send('Connected to server!'.encode('ascii'))
+
+#         thread = threading.Thread(target=handle, args=(client,))
+#         thread.start()
+# print('server is listening....')
+# receive()
 import socket
-import threading
-from flask import Flask, render_template, jsonify, request
 
-app = Flask(__name__)
+host = '0.0.0.0'
+port = 5000
 
-# Define the TCP server details
-SERVER_HOST = '0.0.0.0'
-SERVER_PORT = 5000
-clients = []  # Keep track of connected TCP clients
+server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+server.bind((host, port))
 
-# Function to handle communication between clients via TCP
-def handle_client(client_socket, client_address):
-    print(f"New connection from {client_address}")
-    
-    while True:
-        try:
-            message = client_socket.recv(1024).decode('utf-8')
-            if not message:
-                break
-            print(f"Received message from {client_address}: {message}")
-            # Broadcast the message to all other clients
-            for client in clients:
-                if client != client_socket:  # Do not send back to sender
-                    client.send(message.encode('utf-8'))
-        except:
-            break
+clients = []
 
-    clients.remove(client_socket)
-    client_socket.close()
-    print(f"Connection closed: {client_address}")
+print("Server is listening...")
 
-# TCP Server Thread (Runs in the background)
-def start_tcp_server():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((SERVER_HOST, SERVER_PORT))
-    server_socket.listen(5)
-    print(f"TCP Server listening on {SERVER_HOST}:{SERVER_PORT}")
-    
-    while True:
-        client_socket, client_address = server_socket.accept()
-        clients.append(client_socket)
-        client_thread = threading.Thread(target=handle_client, args=(client_socket, client_address))
-        client_thread.start()
+while True:
+    try:
+        # Receive message and client address
+        message, client_address = server.recvfrom(1024)
 
-# Flask route for the chat UI (serves the HTML page)
-@app.route('/')
-def index():
-    return render_template('index.html')  # Chat UI HTML page
+        # Add new clients to the list
+        if client_address not in clients:
+            clients.append(client_address)
+            print(f"New client added: {client_address}")
 
-# Flask route for sending a message (via AJAX or WebSocket)
-@app.route('/send', methods=['POST'])
-def send_message():
-    message = request.form.get('message')
-    for client in clients:
-        try:
-            client.send(message.encode('utf-8'))  # Send message to all clients
-        except:
-            continue
-    return jsonify({'status': 'Message sent'})
+        # Broadcast the message to all clients except the sender
+        print(f"Received message from {client_address}: {message.decode('ascii')}")
+        for client in clients:
+            if client != client_address:
+                server.sendto(message, client)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        break
 
-# Run Flask and TCP server concurrently
-if __name__ == '__main__':
-    # Start TCP server in a background thread
-    tcp_thread = threading.Thread(target=start_tcp_server)
-    tcp_thread.start()
-
-    # Start Flask server
-    app.run(host='0.0.0.0', port=5001, debug=True)
+server.close()
