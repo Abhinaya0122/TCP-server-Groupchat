@@ -1,35 +1,49 @@
-import asyncio
-import websockets
+import socket
+import threading
+import os
 
-clients = set()
+# Get port from environment variable (if available), fallback to 5000
+port = int(os.environ.get("PORT", 5000))  # Dynamically get port
+host = '0.0.0.0'  # Accept connections from all IPs
+port = 5000
 
-# Broadcast message to all connected clients
-async def broadcast(message):
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind((host, port))
+server.listen(5)  # Listen for up to 5 clients
+
+clients = []
+
+# Broadcast message to all clients except the sender
+def broadcast(message, sender_socket):
     for client in clients:
-        await client.send(message)
+        if client != sender_socket:
+            try:
+                client.send(message)
+            except:
+                clients.remove(client)
 
 # Handle individual client connections
-async def handle_client(websocket, path):
-    clients.add(websocket)
-    try:
-        # Send a welcome message to the new client
-        await websocket.send("Welcome to the WebSocket server!")
-        
-        # Listen for incoming messages from the client
-        async for message in websocket:
-            # Broadcast received message to all clients
-            await broadcast(message)
-    except:
-        pass
-    finally:
-        # Remove client when disconnected
-        clients.remove(websocket)
+def handle(client_socket):
+    while True:
+        try:
+            message = client_socket.recv(1024)
+            if not message:
+                break
+            broadcast(message, client_socket)
+        except:
+            break
 
-# Start the WebSocket server on port 5000
-async def main():
-    server = await websockets.serve(handle_client, '0.0.0.0', 5000)
-    print("Server is listening on ws://0.0.0.0:5000")
-    await server.wait_closed()
+    clients.remove(client_socket)
+    client_socket.close()
 
-if __name__ == "__main__":
-    asyncio.run(main())
+# Main server loop to accept new clients
+def receive():
+    while True:
+        client_socket, address = server.accept()
+        print(f"New connection: {address}")
+        clients.append(client_socket)
+        threading.Thread(target=handle, args=(client_socket,)).start()
+
+# Start the server
+print("Server is listening...")
+receive()
